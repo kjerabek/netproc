@@ -1,18 +1,24 @@
 import psutil
 import time
+import sys
 
 
 class ProcConExtractor:
     proc_info_collection = {}
 
-    def __init__(self, file_name: str, stop_count: int = -1, dump_freq: int = 10, sleep_time: float = 0.1):
-        self.csv_file = open(file_name, 'w+')
+    def __init__(self, file_name: str = None, stop_count: int = -1, dump_freq: int = 10,
+                 sleep_time: float = 0.1, delimiter: str = ','):
         self.current_time = None
         self.header_written = False
         self.dump_finished_freq = dump_freq
         self.stop_count = stop_count
         self.stop_condition = True if stop_count == -1 else False
         self.sleep_time = sleep_time
+        self.delimiter = delimiter
+        self.csv_file = sys.stdout
+
+        if file_name:
+            self.csv_file = open(file_name, 'w+')
 
     @staticmethod
     def get_flowkey(src_ip: str, dst_ip: str,
@@ -79,8 +85,9 @@ class ProcConExtractor:
         if len(self.proc_info_collection.keys()) == 0:
             return
 
-        header = ','.join(list(self.proc_info_collection.values())[0].keys())
+        header = self.delimiter.join(list(self.proc_info_collection.values())[0].keys())
         self.csv_file.write(header + '\n')
+        self.csv_file.flush()
         self.header_written = True
 
     def write_finished(self):
@@ -89,8 +96,11 @@ class ProcConExtractor:
 
         for key in list(self.proc_info_collection.keys()):
             if self.proc_info_collection[key]['last_seen'] != self.current_time:
-                self.csv_file.write(','.join([str(value) for value in self.proc_info_collection[key].values()])+'\n')
+                self.csv_file.write(
+                    self.delimiter.join([str(value) for value in self.proc_info_collection[key].values()])+'\n')
                 del self.proc_info_collection[key]
+
+        self.csv_file.flush()
 
     def __del__(self):
         self.set_current_time()
@@ -103,8 +113,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Monitor and dump connections with IP mapping to processes they belong. Only unique connections.')
 
-    parser.add_argument('output',
+    parser.add_argument('--output',
                         type=str,
+                        default=None,
                         help='Name and path for output csv file.')
     parser.add_argument('--stop-iteration',
                         type=int,
@@ -118,11 +129,16 @@ if __name__ == '__main__':
                         type=float,
                         default=0.1,
                         help='Sleep time after each monitoring iteration.')
+    parser.add_argument('--delimiter',
+                        type=str,
+                        default=',',
+                        help='Output delimiter. (default=",")')
 
     parsed_args = parser.parse_args()
 
     proc_con_extractor = ProcConExtractor(parsed_args.output,
                                           parsed_args.stop_iteration,
                                           parsed_args.dump_freq,
-                                          parsed_args.sleep_time)
+                                          parsed_args.sleep_time,
+                                          parsed_args.delimiter)
     proc_con_extractor.run()
